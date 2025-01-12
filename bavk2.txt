@@ -1,0 +1,84 @@
+import TelegramBot from 'node-telegram-bot-api';
+import fetch from 'node-fetch';
+
+const token = '7295772550:AAF84PMWK2TQ8xQFZ5EAjC_D4APChk7RUEs'; // Token del bot de Telegram
+const bot = new TelegramBot(token, { polling: true });
+
+const buyUrl = "https://telegram.hypurr.fun/hypurr.Telegram/HyperliquidLaunchTrade";
+const headers = {
+  "accept": "application/grpc-web-text",
+  "content-type": "application/grpc-web-text",
+  "x-grpc-web": "1"
+};
+
+// Definir los botones en formato inline keyboard
+const startKeyboard = {
+  reply_markup: {
+    inline_keyboard: [
+      [{ text: 'Iniciar Compra', callback_data: 'iniciar_compra' }] // Acción para el botón
+    ]
+  }
+};
+
+bot.onText(/\/start/, (msg) => {
+  bot.sendMessage(msg.chat.id, "¡Bienvenido! Envía /buy para iniciar la compra.", startKeyboard);
+});
+
+bot.on('callback_query', async (callbackQuery) => {
+  const msg = callbackQuery.message;
+  const action = callbackQuery.data;
+
+  if (action === 'iniciar_compra') {
+    bot.sendMessage(msg.chat.id, "Por favor, envía el payload para la compra.");
+    // Ahora, después de que el usuario presiona "Iniciar Compra", el bot les pedirá el payload
+  }
+});
+
+bot.onText(/\/buy/, (msg) => {
+  bot.sendMessage(msg.chat.id, "Por favor, envía el payload para la compra.");
+});
+
+bot.on('message', async (msg) => {
+  if (msg.text && msg.text !== '/start' && msg.text !== '/buy') {
+    const buyBody = msg.text;
+
+    if (!buyBody || buyBody.trim() === "") {
+      bot.sendMessage(msg.chat.id, "El payload no puede estar vacío. Inténtalo de nuevo.");
+      return;
+    }
+
+    try {
+      const response = await fetch(buyUrl, { method: 'POST', headers, body: buyBody });
+      const base64Response = await response.text();
+      const decodedResponse = decodeAndCleanResponse(base64Response);
+
+      // Verificación de la respuesta para mensajes más claros
+      if (decodedResponse.includes("Bought")) {
+        bot.sendMessage(msg.chat.id, `¡Compra exitosa!\nRespuesta: ${decodedResponse}`);
+      } else if (decodedResponse.includes("Invalid payload")) {
+        bot.sendMessage(msg.chat.id, "Payload inválido. Por favor, verifica el formato del payload.");
+      } else if (decodedResponse.includes("Insufficient balance")) {
+        bot.sendMessage(msg.chat.id, "Saldo insuficiente. No se pudo realizar la compra.");
+      } else {
+        bot.sendMessage(msg.chat.id, `Resultado: ${decodedResponse}`);
+      }
+    } catch (error) {
+      bot.sendMessage(msg.chat.id, `Error durante la compra: ${error.message}`);
+    }
+  }
+});
+
+function decodeAndCleanResponse(base64String) {
+  try {
+    return Buffer.from(base64String, 'base64')
+      .toString('utf-8')
+      .replace(/[\x00-\x1F\x7F-\x9F]|[^\x20-\x7E]/g, '')
+      .trim();
+  } catch {
+    return "";
+  }
+}
+
+bot.on('polling_error', (error) => {
+  console.error('Error de polling:', error.message);
+});
